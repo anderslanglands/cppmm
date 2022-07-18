@@ -436,13 +436,14 @@ struct NodeTypedefType : public NodeType {
     virtual NodeKind node_kind() const override { return _kind; }
 
     NodeTypedefType(std::string qualified_name, NodeId id, NodeId context,
-                          std::string type_name, std::string short_name, std::vector<std::string> namespaces)
+                    std::string type_name, std::string short_name,
+                    std::vector<std::string> namespaces)
         : NodeType(qualified_name, id, context, type_name),
           short_name(short_name), namespaces(namespaces) {}
 
     virtual void write(std::ostream& os, int depth) const override {
         os << indent{depth};
-        for (const auto& ns: namespaces) {
+        for (const auto& ns : namespaces) {
             if (ns == TARGET_NAMESPACE) {
                 os << TARGET_NAMESPACE_PUBLIC;
             } else {
@@ -1355,8 +1356,8 @@ QType process_qtype(
         NodeId id;
         if (it == NODE_MAP.end()) {
             // need to create the pointer type, create the pointee type first
-            QType pointee_qtype = process_qtype(
-                qt->getPointeeType(), template_parameters);
+            QType pointee_qtype =
+                process_qtype(qt->getPointeeType(), template_parameters);
             // now create the pointer type
             id = NODES.size();
             auto node_pointer_type = std::make_unique<NodePointerType>(
@@ -1375,7 +1376,8 @@ QType process_qtype(
 
         const std::string qualified_name = tnd->getQualifiedNameAsString();
         const std::string short_name = tnd->getNameAsString();
-        std::vector<std::string> namespaces = get_namespace_names(tnd->getDeclContext());
+        std::vector<std::string> namespaces =
+            get_namespace_names(tnd->getDeclContext());
 
         const std::string type_node_name = "TYPE:" + qualified_name;
         auto it = NODE_MAP.find(type_node_name);
@@ -1860,7 +1862,8 @@ void process_tnd(const TypedefNameDecl* tnd) {
 
         auto node_tnd = std::make_unique<NodeTypedefNameDecl>(
             qualified_name, id, 0, std::vector<std::string>{},
-            std::move(short_name), std::vector<NodeId>{}, tnd->getUnderlyingType().getAsString());
+            std::move(short_name), std::vector<NodeId>{},
+            tnd->getUnderlyingType().getAsString());
 
         NODES.emplace_back(std::move(node_tnd));
         SPDLOG_TRACE("Inserting NodeTypedefNameDecl {} with id {}",
@@ -2019,8 +2022,10 @@ void process_enum_decl(const EnumDecl* ed, std::string filename) {
     std::vector<std::pair<std::string, std::string>> variants;
     for (const auto& ecd : ed->enumerators()) {
         SPDLOG_DEBUG("        {}", ecd->getNameAsString());
-        variants.push_back(std::make_pair(ecd->getNameAsString(),
-                                          ecd->getInitVal().toString(10)));
+        llvm::SmallString<8> s;
+        ecd->getInitVal().toString(s);
+        variants.push_back(
+            std::make_pair(ecd->getNameAsString(), s.str().str()));
     }
 
     NodeId new_id = NODES.size();
@@ -2383,7 +2388,7 @@ int main(int argc_, const char** argv_) {
     }
     if (exe_path.empty()) {
         SPDLOG_CRITICAL("Could not get exe path");
-        return -1;
+        return 1;
     }
 
     std::string respath1 = (exe_path.parent_path() / "resources").string();
@@ -2396,7 +2401,11 @@ int main(int argc_, const char** argv_) {
 
     project_includes = parse_project_includes(argc, argv);
 
-    CommonOptionsParser OptionsParser(argc, argv, CppmmCategory);
+    auto OptionsParser = CommonOptionsParser::create(argc, argv, CppmmCategory);
+    if (!OptionsParser) {
+        SPDLOG_CRITICAL("Could not create options parser");
+        return 2;
+    }
 
     switch (opt_verbosity) {
     case 0:
@@ -2420,7 +2429,7 @@ int main(int argc_, const char** argv_) {
     }
     spdlog::set_pattern("%20s:%4# %^[%5l]%$ %v");
 
-    ArrayRef<std::string> src_path = OptionsParser.getSourcePathList();
+    ArrayRef<std::string> src_path = OptionsParser->getSourcePathList();
 
     if (src_path.size() != 1) {
         SPDLOG_CRITICAL("Expected 1 header file to parse, got {}",
@@ -2449,7 +2458,7 @@ int main(int argc_, const char** argv_) {
     vtu_paths.push_back(
         fmt::format("/tmp/{}.cpp", fs::path(header_path).stem().string()));
 
-    auto& compdb = OptionsParser.getCompilations();
+    auto& compdb = OptionsParser->getCompilations();
 
     std::string output_dir = cwd;
     if (opt_output_directory != "") {

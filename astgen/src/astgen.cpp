@@ -143,7 +143,7 @@ int main(int argc_, const char** argv_) {
     // grab any user-specified include directories from the command line
     cppmm::PROJECT_INCLUDES = parse_project_includes(argc, argv, cwd);
 
-    CommonOptionsParser OptionsParser(argc, argv, CppmmCategory);
+    auto OptionsParser = CommonOptionsParser::create(argc, argv, CppmmCategory);
 
     // Set up logging
     switch (opt_verbosity) {
@@ -168,7 +168,7 @@ int main(int argc_, const char** argv_) {
     }
     spdlog::set_pattern("%20s:%4# %^[%5l]%$ %v");
 
-    ArrayRef<std::string> src_path = OptionsParser.getSourcePathList();
+    ArrayRef<std::string> src_path = OptionsParser->getSourcePathList();
     std::vector<std::string> dir_paths;
     if (src_path.size() == 1 && fs::is_directory(src_path[0])) {
         // we've been supplied a single directory to start from, find all the
@@ -190,7 +190,7 @@ int main(int argc_, const char** argv_) {
         }
     }
 
-    ClangTool Tool(OptionsParser.getCompilations(),
+    ClangTool Tool(OptionsParser->getCompilations(),
                    ArrayRef<std::string>(dir_paths));
 
     // Insert macros we'll use in the bindings into a virtual header

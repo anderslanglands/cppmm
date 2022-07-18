@@ -2,11 +2,11 @@
 #include "pystring.h"
 #include "clang/AST/ASTContext.h"
 #include "clang/AST/Decl.h"
-#include "clang/AST/PrettyPrinter.h"
 #include "clang/AST/DeclCXX.h"
 #include "clang/AST/DeclTemplate.h"
 #include "clang/AST/GlobalDecl.h"
 #include "clang/AST/Mangle.h"
+#include "clang/AST/PrettyPrinter.h"
 #include "clang/AST/Type.h"
 #include "clang/ASTMatchers/ASTMatchers.h"
 #include "clang/Basic/LLVM.h"
@@ -810,8 +810,9 @@ void process_enum_decl(const EnumDecl* ed, std::string filename) {
     std::vector<std::pair<std::string, std::string>> variants;
     for (const auto& ecd : ed->enumerators()) {
         SPDLOG_DEBUG("        {}", ecd->getNameAsString());
-        variants.push_back(std::make_pair(ecd->getNameAsString(),
-                                          ecd->getInitVal().toString(10)));
+        llvm::SmallString<8> s;
+        ecd->getInitVal().toString(s);
+        variants.push_back(std::make_pair(ecd->getNameAsString(), s.str().str()));
     }
 
     std::vector<std::string> attrs = get_attrs(ed);
@@ -859,8 +860,9 @@ void process_library_enum_decl(const EnumDecl* ed, std::string filename,
     std::vector<std::pair<std::string, std::string>> variants;
     for (const auto& ecd : ed->enumerators()) {
         SPDLOG_DEBUG("        {}", ecd->getNameAsString());
-        variants.push_back(std::make_pair(ecd->getNameAsString(),
-                                          ecd->getInitVal().toString(10)));
+        llvm::SmallString<8> s;
+        ecd->getInitVal().toString(s);
+        variants.push_back(std::make_pair(ecd->getNameAsString(), s.str().str()));
     }
 
     NodeId new_id = NODES.size();
@@ -1036,8 +1038,8 @@ bool is_public_copy_ctor(const Decl* cmd) {
 
 bool is_inaccessible_copy_ctor(const Decl* cmd) {
     if (const CXXConstructorDecl* cd = dyn_cast<CXXConstructorDecl>(cmd)) {
-        return cd->isCopyConstructor() && (cd->getAccess() != AS_public ||
-               cd->isDeleted());
+        return cd->isCopyConstructor() &&
+               (cd->getAccess() != AS_public || cd->isDeleted());
     } else {
         return false;
     }
@@ -1045,8 +1047,8 @@ bool is_inaccessible_copy_ctor(const Decl* cmd) {
 
 bool is_inaccessible_move_ctor(const Decl* cmd) {
     if (const CXXConstructorDecl* cd = dyn_cast<CXXConstructorDecl>(cmd)) {
-        return cd->isMoveConstructor() && (cd->getAccess() != AS_public ||
-               cd->isDeleted());
+        return cd->isMoveConstructor() &&
+               (cd->getAccess() != AS_public || cd->isDeleted());
     } else {
         return false;
     }
@@ -1066,12 +1068,11 @@ bool is_public_move_ctor(const Decl* cmd) {
 }
 
 bool has_forbidden_copy_ctor(const CXXRecordDecl* crd) {
-    for (const Decl* d: crd->decls()) {
+    for (const Decl* d : crd->decls()) {
         if (is_inaccessible_copy_ctor(d)) {
             return true;
         }
     }
-
 
     for (const auto base : crd->bases()) {
         if (const CXXRecordDecl* base_crd =
@@ -1081,17 +1082,16 @@ bool has_forbidden_copy_ctor(const CXXRecordDecl* crd) {
             }
         }
     }
-    
+
     return false;
 }
 
 bool has_forbidden_move_ctor(const CXXRecordDecl* crd) {
-    for (const Decl* d: crd->decls()) {
+    for (const Decl* d : crd->decls()) {
         if (is_inaccessible_move_ctor(d)) {
             return true;
         }
     }
-
 
     for (const auto base : crd->bases()) {
         if (const CXXRecordDecl* base_crd =
@@ -1101,7 +1101,7 @@ bool has_forbidden_move_ctor(const CXXRecordDecl* crd) {
             }
         }
     }
-    
+
     return false;
 }
 
@@ -1117,8 +1117,11 @@ void has_public_copy_move_ctor(const CXXRecordDecl* crd,
     // has_public_copy_ctor = !has_public_copy_ctor;
     // has_public_move_ctor = !has_public_move_ctor;
 
-    // has_public_copy_ctor = crd->hasTrivialCopyConstructor() || crd->hasNonTrivialCopyConstructor();
-    has_public_move_ctor = (crd->hasTrivialMoveConstructor() || crd->hasNonTrivialMoveConstructor()) && !has_forbidden_move_ctor(crd);
+    // has_public_copy_ctor = crd->hasTrivialCopyConstructor() ||
+    // crd->hasNonTrivialCopyConstructor();
+    has_public_move_ctor = (crd->hasTrivialMoveConstructor() ||
+                            crd->hasNonTrivialMoveConstructor()) &&
+                           !has_forbidden_move_ctor(crd);
 
     has_public_copy_ctor = !has_forbidden_copy_ctor(crd);
     // has_public_move_ctor = !has_forbidden_move_ctor(crd);
@@ -1224,7 +1227,8 @@ void process_concrete_record(const CXXRecordDecl* crd, std::string filename,
             is_abstract = crd->isAbstract();
         }
 
-        has_public_copy_move_ctor(crd, has_public_copy_ctor, has_public_move_ctor);
+        has_public_copy_move_ctor(crd, has_public_copy_ctor,
+                                  has_public_move_ctor);
     }
 
     // Add the new Record node
@@ -1544,8 +1548,12 @@ void handle_binding_function(const FunctionDecl* fd) {
             fd->print(sos);
 
             auto function_spelling = s;
-            auto remove_macro = ps::replace(function_spelling, "__attribute__((annotate(\"cppmm|impl\")))", "");
-            auto rename_function = ps::replace(remove_macro, function_short_name + "(", function_short_name + "_impl(");
+            auto remove_macro =
+                ps::replace(function_spelling,
+                            "__attribute__((annotate(\"cppmm|impl\")))", "");
+            auto rename_function =
+                ps::replace(remove_macro, function_short_name + "(",
+                            function_short_name + "_impl(");
             body = base64::base64_encode(rename_function);
 
         } else {
@@ -1572,14 +1580,14 @@ void handle_binding_function(const FunctionDecl* fd) {
             binding_functions[function_qual_name] = {node_function};
         }
     } else {
-        // Rename our function to _impl and give the original name to the C 
+        // Rename our function to _impl and give the original name to the C
         // function as an alias
-        node_function.attrs.push_back("cppmm|rename|" + node_function.short_name);
+        node_function.attrs.push_back("cppmm|rename|" +
+                                      node_function.short_name);
         node_function.short_name = node_function.short_name + "_impl";
         node_function.qualified_name = node_function.qualified_name + "_impl";
 
-        auto fnptr =
-            std::make_unique<NodeFunction>(std::move(node_function));
+        auto fnptr = std::make_unique<NodeFunction>(std::move(node_function));
         NodeId id = NODES.size();
         fnptr->id = id;
         // add the function to its TU

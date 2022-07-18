@@ -128,8 +128,10 @@ mangle_template_args(const TemplateArgumentList& args) {
         } else if (arg.getKind() == TemplateArgument::ArgKind::NullPtr) {
             result.push_back("NullPtr");
         } else if (arg.getKind() == TemplateArgument::ArgKind::Integral) {
+            llvm::SmallString<8> s;
+            arg.getAsIntegral().toString(s);
             result.push_back(
-                ps::replace(arg.getAsIntegral().toString(10), "-", "neg"));
+                ps::replace(s.str().str(), "-", "neg"));
         } else if (arg.getKind() == TemplateArgument::ArgKind::Template) {
             result.push_back("Template");
         } else if (arg.getKind() ==
