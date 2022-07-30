@@ -1716,8 +1716,11 @@ void handle_library_function(const FunctionDecl* fd) {
 
     // find a match in the overloads
     for (auto& binding_fn : it->second) {
-        if (!binding_fn.processed &&
-            match_function(&node_function, &binding_fn)) {
+        if (binding_fn.processed) {
+            continue;
+        }
+
+        if (match_function(&node_function, &binding_fn)) {
             // we have a match. copy over the attributes and store this function
             node_function.attrs = binding_fn.attrs;
             node_function.context = binding_fn.context;
