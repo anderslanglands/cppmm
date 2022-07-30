@@ -12,6 +12,7 @@
 #include "clang/Basic/LLVM.h"
 #include "llvm/Support/Casting.h"
 #include "llvm/Support/raw_ostream.h"
+#include <algorithm>
 #include <cassert>
 #include <cstdint>
 #include <memory>
@@ -1476,6 +1477,20 @@ std::unordered_map<std::string, std::vector<NodeFunction>> binding_functions;
 std::unordered_map<std::string, NodeEnum> binding_enums;
 std::unordered_map<std::string, NodeVar> binding_vars;
 
+void store_function(const FunctionDecl* fd, std::unique_ptr<NodeFunction> fnptr, cppmm::NodeId context) {
+    NodeId id = NODES.size();
+    fnptr->id = id;
+    auto* node_tu =
+        (NodeTranslationUnit*)NODES.at(context).get();
+    // process the namespaces again to make sure we've got the
+    // namespaces in the TU
+    const std::vector<NodeId> namespaces =
+        get_namespaces(fd->getParent(), node_tu);
+    fnptr->context = node_tu->id;
+    node_tu->children.push_back(id);
+    NODES.emplace_back(std::move(fnptr));
+}
+
 /// This function is responsible for storing the description of the given
 /// FunctionDecl so that we can match against it later. Only functions that
 /// are explicitly declared in the bindings have AST output for them.
@@ -1490,22 +1505,6 @@ void handle_binding_function(const FunctionDecl* fd) {
     if (const auto* cmd = dyn_cast<CXXMethodDecl>(fd)) {
         // don't do out-of-line method declarations
         SPDLOG_DEBUG("    Ignoring out-of-line method declaration");
-
-        // auto attrs = get_attrs(fd);
-        // SPDLOG_DEBUG("    attrs: {}", ps::join(", ", attrs));
-
-        // SPDLOG_DEBUG("    Is CMD");
-        // if (const auto* ftsi = cmd->getTemplateSpecializationInfo()) {
-        //     SPDLOG_DEBUG("    Got ftsi {}", (void*)ftsi->getTemplate());
-        //     ftsi->getTemplate()->dump();
-        // }
-        // if (const auto* tal = cmd->getTemplateSpecializationArgs()) {
-        //     SPDLOG_DEBUG("    TAL");
-        //     for (int i = 0; i < tal->size(); ++i) {
-        //         SPDLOG_DEBUG("        {}",
-        //                      tal->get(i).getAsType().getAsString());
-        //     }
-        // }
         return;
     }
 
@@ -1574,9 +1573,12 @@ void handle_binding_function(const FunctionDecl* fd) {
     node_function.definition = body;
 
     if (body.empty()) {
+        // if there's no function body (i.e. not an IMPL)
         if (it != binding_functions.end()) {
+            // Add this function to the list of overloads of this name
             it->second.emplace_back(std::move(node_function));
         } else {
+            // Create a new list of overloads for this function name
             binding_functions[function_qual_name] = {node_function};
         }
     } else {
@@ -1588,18 +1590,7 @@ void handle_binding_function(const FunctionDecl* fd) {
         node_function.qualified_name = node_function.qualified_name + "_impl";
 
         auto fnptr = std::make_unique<NodeFunction>(std::move(node_function));
-        NodeId id = NODES.size();
-        fnptr->id = id;
-        // add the function to its TU
-        auto* node_tu =
-            (NodeTranslationUnit*)NODES.at(node_function.context).get();
-        // process the namespaces again to make sure we've got the
-        // namespaces in the TU
-        const std::vector<NodeId> namespaces =
-            get_namespaces(fd->getParent(), node_tu);
-        fnptr->context = node_tu->id;
-        node_tu->children.push_back(id);
-        NODES.emplace_back(std::move(fnptr));
+        store_function(fd, std::move(fnptr), node_function.context);
     }
 }
 
@@ -1721,6 +1712,8 @@ void handle_library_function(const FunctionDecl* fd) {
         }
 
         if (match_function(&node_function, &binding_fn)) {
+            // add the function to its TU
+            SPDLOG_DEBUG("MATCHED {}", function_qual_name);
             // we have a match. copy over the attributes and store this function
             node_function.attrs = binding_fn.attrs;
             node_function.context = binding_fn.context;
@@ -1728,19 +1721,7 @@ void handle_library_function(const FunctionDecl* fd) {
             node_function.exceptions = binding_fn.exceptions;
             auto fnptr =
                 std::make_unique<NodeFunction>(std::move(node_function));
-            NodeId id = NODES.size();
-            fnptr->id = id;
-            // add the function to its TU
-            SPDLOG_DEBUG("MATCHED {}", function_qual_name);
-            auto* node_tu =
-                (NodeTranslationUnit*)NODES.at(node_function.context).get();
-            // process the namespaces again to make sure we've got the
-            // namespaces in the TU
-            const std::vector<NodeId> namespaces =
-                get_namespaces(fd->getParent(), node_tu);
-            fnptr->context = node_tu->id;
-            node_tu->children.push_back(id);
-            NODES.emplace_back(std::move(fnptr));
+            store_function(fd, std::move(fnptr), node_function.context);
             binding_fn.processed = true;
         }
     }
