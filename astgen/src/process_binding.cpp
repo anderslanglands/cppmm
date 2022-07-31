@@ -1495,7 +1495,7 @@ void store_function(const FunctionDecl* fd, std::unique_ptr<NodeFunction> fnptr,
 /// FunctionDecl so that we can match against it later. Only functions that
 /// are explicitly declared in the bindings have AST output for them.
 void handle_binding_function(const FunctionDecl* fd) {
-    SPDLOG_DEBUG("GOt FD {}", fd->getQualifiedNameAsString());
+    SPDLOG_DEBUG("Got FD {}", fd->getQualifiedNameAsString());
     if (fd->getTemplatedKind() == 1) {
         // ignore template functions in the binding
         SPDLOG_DEBUG("    Ignoring templated function");
@@ -1528,6 +1528,7 @@ void handle_binding_function(const FunctionDecl* fd) {
     auto* node_tu = get_translation_unit(filename);
 
     auto attrs = get_attrs(fd);
+    bool is_manual = has_manual_attr(attrs);
 
     QType return_qtype;
     std::vector<Param> params;
@@ -1572,7 +1573,12 @@ void handle_binding_function(const FunctionDecl* fd) {
 
     node_function.definition = body;
 
-    if (body.empty()) {
+    if (is_manual) {
+        SPDLOG_DEBUG("    Function is MANUAL. Storing...");
+        // store the function directly if MANUAL
+        auto fnptr = std::make_unique<NodeFunction>(std::move(node_function));
+        store_function(fd, std::move(fnptr), node_function.context);
+    } else if (body.empty()) {
         // if there's no function body (i.e. not an IMPL)
         if (it != binding_functions.end()) {
             // Add this function to the list of overloads of this name
@@ -1582,6 +1588,7 @@ void handle_binding_function(const FunctionDecl* fd) {
             binding_functions[function_qual_name] = {node_function};
         }
     } else {
+        // We have an implementation we want to pass to the C layer
         // Rename our function to _impl and give the original name to the C
         // function as an alias
         node_function.attrs.push_back("cppmm|rename|" +
