@@ -49,6 +49,8 @@ std::unordered_map<uint64_t, NodeFunction*> function_map;
 std::unordered_map<std::string, unsigned int> EXCEPTION_MAP;
 unsigned int EXCEPTION_CODE = 1;
 
+std::vector<std::string> OPAQUE_BYTES_WARNINGS;
+
 /// Get the size and alignment for the given decl. Returns true if the info
 /// could be ascertained, false otherwise.
 bool get_abi_info(const TypeDecl* td, ASTContext& ctx, uint32_t& size,
@@ -1218,12 +1220,13 @@ void process_concrete_record(const CXXRecordDecl* crd, std::string filename,
             // we can't trivially move a type if we can't trivially copy it
             is_trivially_movable &= is_trivially_copyable;
             if (!is_trivially_movable && has_opaquebytes_attr(attrs)) {
-                SPDLOG_WARN(
-                    "Record {} is marked as opaquebytes, but is not trivially "
-                    "movable or copyable. You must ensure that the memory "
-                    "representation of the bound struct is never moved or very "
-                    "bad things will happen.",
-                    record_name);
+                // SPDLOG_WARN(
+                //     "Record {} is marked as opaquebytes, but is not trivially "
+                //     "movable or copyable. You must ensure that the memory "
+                //     "representation of the bound struct is never moved or very "
+                //     "bad things will happen.",
+                //     record_name);
+                OPAQUE_BYTES_WARNINGS.push_back(record_name);
             }
             is_abstract = crd->isAbstract();
         }

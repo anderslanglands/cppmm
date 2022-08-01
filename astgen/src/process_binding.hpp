@@ -4,10 +4,13 @@
 #include <clang/ASTMatchers/ASTMatchers.h>
 #include <clang/Frontend/CompilerInstance.h>
 #include <clang/Frontend/FrontendAction.h>
+#include <vector>
 
 /* #include "exports.hpp" */
 
 namespace cppmm {
+
+extern std::vector<std::string> OPAQUE_BYTES_WARNINGS;
 
 class ProcessBindingCallback : public clang::ast_matchers::MatchFinder::MatchCallback {
     virtual void run(const clang::ast_matchers::MatchFinder::MatchResult& result);

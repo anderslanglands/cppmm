@@ -281,5 +281,13 @@ int main(int argc_, const char** argv_) {
     // Write out the binding AST per translation unit
     cppmm::write_tus(output_dir, src_path[0]);
 
+    // Print out warnings about opaquebytes records
+    if (!cppmm::OPAQUE_BYTES_WARNINGS.empty()) {
+        SPDLOG_WARN("The following types are marked as OPAQUEBYTES but are not trivially_movable or trivially_copyable. You must take care to ensure that they memory representation is never moved or very bad things will happen.");
+        for (const auto& rec_name: cppmm::OPAQUE_BYTES_WARNINGS) {
+            SPDLOG_WARN("    {}", rec_name);
+        }
+    }
+
     return result;
 }
